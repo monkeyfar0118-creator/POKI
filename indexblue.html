@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Hexa Sort - 完美修复版</title>
+    <style>
+        :root {
+            --bg-color: #15386d;
+            --hex-w: 56px;  
+            --hex-h: 64px;  
+            --gap-x: 58px;  
+            --gap-y: 50px; 
+            --layer-h: 6px; 
+            --game-font: 'Segoe UI Black', 'Roboto Black', 'Arial Black', 'Arial', sans-serif;
+        }
+
+        body {
+            background: radial-gradient(circle at center, #1e4db7 0%, #0b2568 100%);
+            margin: 0;
+            height: 100vh;
+            overflow: hidden;
+            font-family: var(--game-font);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none; 
+        }
+
+        /* --- UI --- */
+        header {
+            margin-top: 20px;
+            color: white;
+            text-align: center;
+            pointer-events: none;
+            z-index: 100;
+            width: 100%;
+            position: relative;
+        }
+
+        .coin-display {
+            position: absolute;
+            left: 20px; top: 0;
+            background: rgba(0,0,0,0.4);
+            padding: 5px 15px;
+            border-radius: 20px;
+            display: flex; align-items: center; gap: 8px;
+            font-size: 18px;
+            border: 1px solid rgba(255,215,0,0.3);
+            transition: transform 0.1s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 101;
+        }
+        .coin-display.scale-bump { transform: scale(1.4); background: rgba(255,215,0,0.4); }
+
+        .coin-icon {
+            width: 22px; height: 22px;
+            background: radial-gradient(circle at 30% 30%, #fff59d, #ffd700);
+            border-radius: 50%;
+            box-shadow: inset -2px -2px 0 #ff8f00, 0 0 5px rgba(0,0,0,0.3);
+            border: 2px solid #ffecb3;
+            position: relative;
+        }
+        .coin-icon::after {
+            content: '$'; position: absolute; width: 100%; height: 100%;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 14px; color: #e65100; font-weight: bold; top: -1px;
+        }
+        
+        .level-info { font-size: 16px; opacity: 0.8; letter-spacing: 2px; margin-bottom: 5px; text-transform: uppercase; }
+        #score { font-size: 50px; font-weight: 900; margin: 0; text-shadow: 0 4px 15px rgba(0,0,0,0.4); }
+        #target-score { font-size: 14px; opacity: 0.6; margin-top: 5px; }
+
+        /* --- 弹窗系统 --- */
+        .overlay-screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(11, 37, 104, 0.9);
+            backdrop-filter: blur(10px);
+            z-index: 9999;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            color: white;
+            transition: opacity 0.3s, transform 0.3s, visibility 0.3s;
+            visibility: visible; /* 默认可见 */
+        }
+
+        /* 关键修复：使用 visibility 确保隐藏后不可点击 */
+        .hidden { 
+            opacity: 0; 
+            transform: scale(1.1); 
+            pointer-events: none !important; 
+            visibility: hidden; 
+        }
+
+        .menu-card {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            padding: 40px 30px;
+            border-radius: 30px;
+            text-align: center;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.4);
+            width: 280px;
+        }
+
+        .menu-title {
+            font-size: 48px; margin-bottom: 5px;
+            background: linear-gradient(to bottom, #fff, #aecfff);
+            -webkit-background-clip: text; color: transparent;
+            text-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+
+        .level-badge {
+            background: #ff4757; padding: 5px 15px; border-radius: 20px;
+            font-size: 14px; display: inline-block; margin-bottom: 20px;
+            box-shadow: 0 5px 15px rgba(255, 71, 87, 0.4);
+        }
+
+        .reward-box {
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+            background: rgba(0,0,0,0.2); padding: 10px 20px;
+            border-radius: 15px; margin-bottom: 30px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .reward-box .coin-icon { width: 30px; height: 30px; font-size: 18px; }
+        .reward-text { font-size: 24px; color: #ffd54f; font-weight: bold; }
+
+        .btn {
+            background: linear-gradient(180deg, #40c4ff 0%, #0091ea 100%);
+            border: none; padding: 15px 40px; border-radius: 50px;
+            color: white; font-family: var(--game-font); font-size: 24px;
+            cursor: pointer; box-shadow: 0 10px 0 #006bad, inset 0 2px 0 rgba(255,255,255,0.4);
+            transition: transform 0.1s, box-shadow 0.1s;
+            width: 100%; margin-bottom: 15px; margin-top: 10px;
+        }
+        .btn:active { transform: translateY(4px); box-shadow: 0 6px 0 #006bad, inset 0 2px 0 rgba(255,255,255,0.4); }
+        .btn-secondary { background: #8daec9; box-shadow: 0 10px 0 #546e7a; font-size: 18px; }
+        .btn-secondary:active { box-shadow: 0 6px 0 #546e7a; }
+
+        /* --- 游戏场景 --- */
+        #game-stage { position: relative; width: 360px; height: 440px; margin: 20px 0; z-index: 1; }
+
+        #dock-bg {
+            background: rgba(0, 0, 0, 0.25); border-radius: 24px;
+            padding: 20px 30px; margin-top: auto; margin-bottom: 40px;
+            display: flex; gap: 30px; backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1); z-index: 2000;
+        }
+        
+        .dock-slot { width: var(--hex-w); height: var(--hex-h); position: relative; display: flex; justify-content: center; align-items: center; }
+
+        .grid-base {
+            position: absolute; width: var(--hex-w); height: var(--hex-h);
+            background-color: #8daec9;
+            -webkit-mask: url("data:image/svg+xml,%3Csvg width='56' height='64' viewBox='0 0 56 64' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M28 0 L56 16 L56 48 L28 64 L0 48 L0 16 Z'/%3E%3C/svg%3E") no-repeat center / contain;
+            mask: url("data:image/svg+xml,%3Csvg width='56' height='64' viewBox='0 0 56 64' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M28 0 L56 16 L56 48 L28 64 L0 48 L0 16 Z'/%3E%3C/svg%3E") no-repeat center / contain;
+            opacity: 0.4; transition: opacity 0.2s, background-color 0.2s;
+        }
+        .grid-base.highlight-target { opacity: 1; background-color: #ffffff; box-shadow: 0 0 15px #ffffff; z-index: 50; }
+
+        .stack-container {
+            position: absolute; width: var(--hex-w); height: var(--hex-h);
+            transition: left 0.2s ease-out, top 0.2s ease-out;
+            filter: drop-shadow(0 10px 5px rgba(0,0,0,0.3));
+        }
+        .stack-container.in-dock { cursor: grab; pointer-events: auto; z-index: 2001; }
+        .stack-container.in-dock:active { cursor: grabbing; transform: scale(0.95); }
+
+        /* 生成动画 */
+        .pop-in { animation: popInEffect 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; transform: scale(0); }
+        @keyframes popInEffect { 0% { transform: scale(0); } 100% { transform: scale(1); } }
+
+        .chip-layer {
+            position: absolute; width: 100%; height: 100%; left: 0; pointer-events: none;
+            -webkit-mask: url("data:image/svg+xml,%3Csvg width='56' height='64' viewBox='0 0 56 64' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M28 0 L56 16 L56 48 L28 64 L0 48 L0 16 Z'/%3E%3C/svg%3E") no-repeat center / contain;
+            mask: url("data:image/svg+xml,%3Csvg width='56' height='64' viewBox='0 0 56 64' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M28 0 L56 16 L56 48 L28 64 L0 48 L0 16 Z'/%3E%3C/svg%3E") no-repeat center / contain;
+            transition: filter 0.2s;
+        }
+        
+        .stack-container .chip-layer:last-child::after {
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.8) 45%, rgba(255,255,255,0.9) 50%, rgba(255,255,255,0.8) 55%, transparent 70%);
+            background-size: 250% 100%; background-position: 100% 0; 
+            animation: shimmerMove 4s infinite cubic-bezier(0.4, 0.0, 0.2, 1);
+            pointer-events: none; z-index: 10; mix-blend-mode: soft-light;
+        }
+        .stack-container .chip-layer:last-child::before {
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(110deg, transparent 35%, rgba(255,255,255,0.6) 50%, transparent 65%);
+            background-size: 250% 100%; background-position: 100% 0;
+            animation: shimmerMove 4s infinite cubic-bezier(0.4, 0.0, 0.2, 1);
+            pointer-events: none; z-index: 11;
+        }
+        @keyframes shimmerMove { 0% { background-position: 150% 0; } 20% { background-position: -50% 0; } 100% { background-position: -50% 0; } }
+
+        .chip-flash-seq {
+            filter: brightness(5) contrast(0.5) !important;
+            box-shadow: 0 0 20px rgba(255, 255, 255, 1); z-index: 99;
+        }
+
+        .c-red { background-color: #ff4757; } .c-blue { background-color: #1e90ff; }
+        .c-green { background-color: #2ed573; } .c-yellow { background-color: #ffa502; }
+        .c-purple { background-color: #8e44ad; }
+
+        .count-label {
+            position: absolute; width: 100%; height: 100%;
+            display: flex; justify-content: center; align-items: center;
+            color: white; font-family: var(--game-font); font-weight: 900; font-size: 32px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.6); z-index: 50; pointer-events: none;
+        }
+
+        .particle {
+            position: absolute; width: 8px; height: 8px; border-radius: 0; 
+            pointer-events: none; z-index: 9000; mix-blend-mode: plus-lighter; 
+        }
+
+        .flying-coin {
+            position: fixed; width: 24px; height: 24px;
+            background: radial-gradient(circle at 30% 30%, #fff59d, #ffd700);
+            border-radius: 50%; border: 2px solid #ffecb3;
+            z-index: 10000; box-shadow: 0 5px 10px rgba(0,0,0,0.3);
+            pointer-events: none;
+        }
+
+        .dragging-clone {
+            position: fixed; z-index: 9999 !important; pointer-events: none; transition: none;
+            filter: drop-shadow(0 20px 30px rgba(0,0,0,0.4)); will-change: left, top;
+        }
+        .dragging-clone.smooth-move { transition: left 0.15s cubic-bezier(0.1, 0.7, 0.1, 1), top 0.15s cubic-bezier(0.1, 0.7, 0.1, 1); }
+
+        .flying-chip { width: 56px; height: 64px; position: absolute; z-index: 5000; transition: left 0.08s linear, top 0.08s linear; }
+        
+        .mascot-wrapper { position: relative; width: 100px; height: 100px; margin: 0 auto 25px auto; animation: mascotFloat 3s ease-in-out infinite; transform-origin: center bottom; }
+        .m-body { width: 100%; height: 100%; background-color: #ffd54f; border-radius: 24px; position: relative; z-index: 2; box-shadow: 0 8px 0 #ff8f00; }
+        .m-horn { position: absolute; width: 24px; height: 30px; background-color: #ff8f00; border-radius: 12px; top: -12px; z-index: 1; }
+        .m-horn.left { left: 12px; transform: rotate(-15deg); } .m-horn.right { right: 12px; transform: rotate(15deg); }
+        .m-eye { position: absolute; width: 28px; height: 28px; background: white; border-radius: 50%; top: 30px; }
+        .m-eye::after { content: ''; position: absolute; width: 10px; height: 10px; background: #212121; border-radius: 50%; top: 8px; right: 6px; }
+        .m-eye.left { left: 16px; } .m-eye.right { right: 16px; }
+        .m-mouth { position: absolute; width: 16px; height: 8px; border-bottom: 3px solid #212121; border-radius: 50%; left: 50%; margin-left: -8px; bottom: 25px; }
+        .mascot-wrapper.happy .m-mouth { height: 12px; border-bottom: 4px solid #212121; width: 20px; margin-left: -10px; }
+        @keyframes mascotFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+    </style>
+</head>
+<body>
+
+<div id="main-menu" class="overlay-screen">
+    <div class="mascot-wrapper">
+        <div class="m-horn left"></div><div class="m-horn right"></div>
+        <div class="m-body"><div class="m-eye left"></div><div class="m-eye right"></div><div class="m-mouth"></div></div>
+    </div>
+    <div class="menu-title">HEXA SORT</div>
+    <div class="menu-card">
+        <div class="level-badge" id="menu-level-badge">LEVEL 1</div>
+        <button class="btn" id="btn-start">PLAY</button>
+        <button class="btn btn-secondary" id="btn-sound">SOUND: ON</button>
+    </div>
+</div>
+
+<div id="level-up-screen" class="overlay-screen hidden">
+    <div class="mascot-wrapper happy">
+        <div class="m-horn left"></div><div class="m-horn right"></div>
+        <div class="m-body" style="background-color: #69f0ae; box-shadow: 0 8px 0 #00c853;"> 
+            <div class="m-eye left"></div><div class="m-eye right"></div><div class="m-mouth"></div>
+        </div>
+    </div>
+    <div class="menu-title">AWESOME!</div>
+    <div class="menu-card">
+        <div style="font-size: 20px; margin-bottom: 10px; opacity: 0.9">LEVEL COMPLETED</div>
+        <div style="font-size: 40px; font-weight:900; margin-bottom: 20px; color: #ffd54f" id="final-score">2000</div>
+        <div class="reward-box" id="reward-display-area">
+            <div class="coin-icon"></div>
+            <div class="reward-text">+50</div>
+        </div>
+        <button class="btn" id="btn-next">NEXT LEVEL</button>
+    </div>
+</div>
+
+<header>
+    <div class="coin-display" id="coin-ui">
+        <div class="coin-icon"></div>
+        <span id="coin-count">100</span>
+    </div>
+    <div class="level-info" id="ui-level">LEVEL 1</div>
+    <div id="score">0</div>
+    <div id="target-score">GOAL: 500</div>
+</header>
+
+<div id="game-stage"></div>
+
+<div id="dock-bg">
+    <div class="dock-slot" id="slot-0"></div>
+    <div class="dock-slot" id="slot-1"></div>
+    <div class="dock-slot" id="slot-2"></div>
+</div>
+
+<script>
+    const SoundManager = {
+        ctx: null, enabled: true,
+        init: function() {
+            if(!this.enabled) return;
+            if(!this.ctx) { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); }
+            if(this.ctx.state === 'suspended') this.ctx.resume();
+        },
+        toggle: function() { this.enabled = !this.enabled; return this.enabled; },
+        playTone: function(freq, type, duration, vol=0.1, when=0) {
+            if(!this.ctx || !this.enabled) return;
+            const o=this.ctx.createOscillator(), g=this.ctx.createGain();
+            o.type=type; o.frequency.setValueAtTime(freq, this.ctx.currentTime+when);
+            g.gain.setValueAtTime(vol, this.ctx.currentTime+when);
+            g.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime+when+duration);
+            o.connect(g); g.connect(this.ctx.destination);
+            o.start(this.ctx.currentTime+when); o.stop(this.ctx.currentTime+when+duration);
+        },
+        playPick: function() { this.playTone(500, 'sine', 0.1); },
+        playDrop: function() { this.playTone(150, 'triangle', 0.1); },
+        playZip: function() { this.playTone(800, 'sine', 0.05, 0.05); },
+        playTick: function() { this.playTone(1200, 'square', 0.03, 0.03); },
+        playFlash: function() { this.playTone(600, 'sine', 0.05, 0.1); }, 
+        playPop: function(i) { this.playTone(400 + i*50, 'triangle', 0.08, 0.2); },
+        playCoin: function() { this.playTone(1500, 'sine', 0.2, 0.1); this.playTone(2000, 'sine', 0.2, 0.05, 0.05); },
+        playChime: function() { 
+            this.playTone(440, 'sine', 0.5, 0.1, 0); 
+            this.playTone(554, 'sine', 0.5, 0.1, 0.1); 
+            this.playTone(659, 'sine', 0.8, 0.1, 0.2); 
+        }
+    };
+
+    const CONSTANTS = { W:56, H:64, GAP_X:58, GAP_Y:50, OFFSET_X:36, OFFSET_Y:40, LAYER_H:6, DRAG_OFFSET_Y:-80, DRAG_OFFSET_X:-20 };
+    const COLORS = ['red', 'blue', 'green', 'yellow', 'purple'];
+    const COLOR_HEX = { 'red':'#ff4757', 'blue':'#1e90ff', 'green':'#2ed573', 'yellow':'#ffa502', 'purple':'#8e44ad' };
+    const MAP = [[0,1,1,1,0],[1,1,1,1,0],[1,1,1,1,1],[1,1,1,1,0],[0,1,1,1,0]];
+    
+    const LEVELS = [
+        { id:1, target:500, prefilled:[] },
+        { id:2, target:800, prefilled:[{r:2,c:2,items:['red','red','red']}] },
+        { id:3, target:1200, prefilled:[{r:0,c:1,items:['blue','blue']},{r:4,c:3,items:['green','green']}] },
+        { id:4, target:1500, prefilled:[{r:1,c:1,items:['yellow','yellow']},{r:3,c:3,items:['purple','purple']}] },
+        { id:5, target:2500, prefilled:[{r:2,c:2,items:['red','blue','red','blue']},{r:4,c:2,items:['green','green']}] }
+    ];
+
+    let currentLevelIdx = 0;
+    let grid = [];
+    let dock = [null, null, null];
+    let score = 0;
+    let playerCoins = 100;
+    let isLock = false;
+    // 关键修复：添加转场锁，防止“下一关”被重复触发
+    let isLevelTransition = false;
+    let eliminationCombo = 0;
+
+    const stageEl = document.getElementById('game-stage');
+    const scoreEl = document.getElementById('score');
+    const targetScoreEl = document.getElementById('target-score');
+    const levelUiEl = document.getElementById('ui-level');
+    const dockSlots = [0,1,2].map(i=>document.getElementById(`slot-${i}`));
+    const coinEl = document.getElementById('coin-count');
+    const coinUiBox = document.getElementById('coin-ui');
+    
+    const menuEl = document.getElementById('main-menu');
+    const levelUpEl = document.getElementById('level-up-screen');
+    const finalScoreEl = document.getElementById('final-score');
+    const btnStart = document.getElementById('btn-start');
+    const btnSound = document.getElementById('btn-sound');
+    const btnNext = document.getElementById('btn-next');
+    const menuBadge = document.getElementById('menu-level-badge');
+    const rewardBox = document.getElementById('reward-display-area');
+
+    function initGame() {
+        btnStart.onclick = startGame;
+        btnNext.onclick = handleNextLevelClick;
+        btnSound.onclick = () => {
+            let e = SoundManager.toggle();
+            btnSound.innerText = e ? "SOUND: ON" : "SOUND: OFF";
+            btnSound.style.background = e ? "#8daec9" : "#546e7a";
+        };
+        updateCoinUI();
+        updateMenuInfo();
+    }
+
+    function startGame() {
+        SoundManager.init();
+        menuEl.classList.add('hidden');
+        isLock = false;
+        loadLevel(currentLevelIdx);
+    }
+
+    // 关键修复：处理点击下一关，彻底杜绝误触BUG
+    async function handleNextLevelClick() {
+        // 如果正在转场，绝对禁止再次执行
+        if (isLevelTransition) return;
+        isLevelTransition = true;
+        
+        // 视觉禁用
+        btnNext.style.pointerEvents = 'none';
+        
+        const startRect = rewardBox.getBoundingClientRect();
+        const endRect = coinUiBox.getBoundingClientRect();
+        
+        const startX = startRect.left + startRect.width/2;
+        const startY = startRect.top + startRect.height/2;
+        const endX = endRect.left + endRect.width/2;
+        const endY = endRect.top + endRect.height/2;
+
+        const coinPromises = [];
+        for(let i=0; i<8; i++) {
+            coinPromises.push(flyCoin(startX, startY, endX, endY, i * 40));
+        }
+        
+        await Promise.all(coinPromises);
+        
+        playerCoins += 50;
+        updateCoinUI();
+        
+        // 等待金币飞完后隐藏界面
+        setTimeout(() => {
+            levelUpEl.classList.add('hidden');
+            
+            // 重要：加载新关卡
+            loadLevel(currentLevelIdx);
+            
+            // 在加载完成后的一小段时间后，才重置转场锁，
+            // 确保之前的点击事件已完全消耗，不会透传。
+            setTimeout(() => {
+                isLevelTransition = false;
+                btnNext.style.pointerEvents = 'auto';
+            }, 500);
+        }, 500);
+    }
+
+    function flyCoin(sx, sy, ex, ey, delay) {
+        return new Promise(resolve => {
+            setTimeout(() => {
+                const c = document.createElement('div');
+                c.className = 'flying-coin';
+                c.style.left = sx + 'px'; c.style.top = sy + 'px';
+                document.body.appendChild(c);
+                
+                const angle = Math.random() * Math.PI * 2;
+                const scatterDist = 60 + Math.random() * 40;
+                const scatterX = Math.cos(angle) * scatterDist;
+                const scatterY = Math.sin(angle) * scatterDist;
+
+                requestAnimationFrame(() => {
+                    c.style.transition = 'transform 0.3s ease-out';
+                    c.style.transform = `translate(${scatterX}px, ${scatterY}px)`;
+                    
+                    setTimeout(() => {
+                        c.style.transition = 'transform 0.5s ease-in, opacity 0.5s';
+                        const moveX = ex - sx; const moveY = ey - sy;
+                        c.style.transform = `translate(${moveX}px, ${moveY}px) scale(0.6)`;
+                        
+                        setTimeout(() => {
+                            c.remove();
+                            coinUiBox.classList.remove('scale-bump');
+                            void coinUiBox.offsetWidth;
+                            coinUiBox.classList.add('scale-bump');
+                            SoundManager.playCoin();
+                            resolve();
+                        }, 500);
+                    }, 350);
+                });
+            }, delay);
+        });
+    }
+
+    function loadLevel(idx) {
+        if(idx >= LEVELS.length) idx = LEVELS.length-1;
+        const d = LEVELS[idx];
+        score = 0; scoreEl.innerText = "0";
+        targetScoreEl.innerText = `GOAL: ${d.target}`;
+        levelUiEl.innerText = `LEVEL ${d.id}`;
+        
+        // 重置网格
+        createGrid();
+
+        // 2. 修复：从下往上生成动画 (按行号从大到小排序)
+        const sortedPrefilled = [...d.prefilled].sort((a, b) => b.r - a.r);
+        
+        // 逐个生成
+        let animDelay = 0;
+        sortedPrefilled.forEach(p => {
+            setTimeout(() => {
+                spawnPremadeStack(p.r, p.c, p.items, true); // true 表示启用生成动画
+            }, animDelay);
+            animDelay += 100; // 间隔时间
+        });
+        
+        // 清空 Dock
+        dock = [null,null,null];
+        dockSlots.forEach(s=>s.innerHTML='');
+        
+        // 等待棋盘动画播放差不多了，再生成 Dock
+        setTimeout(() => {
+            spawnDock();
+            isLock = false; 
+        }, animDelay + 200);
+    }
+
+    function updateCoinUI() { coinEl.innerText = playerCoins; }
+    function updateMenuInfo() { menuBadge.innerText = `LEVEL ${currentLevelIdx+1}`; }
+
+    function getPos(r,c) {
+        const ox = (r%2)*(CONSTANTS.GAP_X/2);
+        return { x: c*CONSTANTS.GAP_X + ox + CONSTANTS.OFFSET_X, y: r*CONSTANTS.GAP_Y + CONSTANTS.OFFSET_Y };
+    }
+    
+    function createGrid() {
+        stageEl.innerHTML = ''; grid = [];
+        for(let r=0; r<5; r++) {
+            grid[r] = [];
+            for(let c=0; c<5; c++) {
+                if(MAP[r][c]) {
+                    grid[r][c] = null;
+                    const b = document.createElement('div');
+                    b.className = 'grid-base'; b.id = `base-${r}-${c}`;
+                    const p = getPos(r,c);
+                    b.style.left = p.x+'px'; b.style.top = p.y+'px';
+                    b.style.zIndex = 90 + r*10;
+                    stageEl.appendChild(b);
+                } else grid[r][c] = 'INVALID';
+            }
+        }
+    }
+
+    function createStack(items, loc='dock', r=0) {
+        const c = document.createElement('div');
+        c.className = 'stack-container';
+        if(loc==='dock') c.classList.add('in-dock');
+        else c.style.zIndex = 100 + r*10;
+        renderStackVisuals(c, items);
+        return c;
+    }
+
+    // 新增 animate 参数
+    function spawnPremadeStack(r,c,items, animate=false) {
+        const el = createStack([...items], 'board', r);
+        const p = getPos(r,c);
+        el.style.left = p.x+'px'; el.style.top = p.y+'px';
+        
+        // 添加进场动画类
+        if(animate) {
+            el.classList.add('pop-in');
+            // 播放轻微的生成音效
+            SoundManager.playPick();
+        }
+        
+        stageEl.appendChild(el);
+        grid[r][c] = { items: [...items], el: el };
+    }
+
+    function renderStackVisuals(container, items) {
+        container.innerHTML = '';
+        const count = Math.min(items.length, 12);
+        for(let i=0; i<count; i++) {
+            const l = document.createElement('div');
+            l.className = `chip-layer c-${items[i]}`;
+            l.style.top = -(i*CONSTANTS.LAYER_H)+'px';
+            l.style.filter = `brightness(${1 - (count-1-i)*0.05})`;
+            container.appendChild(l);
+        }
+        if(items.length>0) {
+            const t = document.createElement('div');
+            t.className = 'count-label';
+            let topC = items[items.length-1], grp=0;
+            for(let k=items.length-1; k>=0; k--) if(items[k]===topC) grp++; else break;
+            t.innerText = grp;
+            t.style.top = -(count*CONSTANTS.LAYER_H)+'px';
+            container.appendChild(t);
+        }
+    }
+
+    function spawnParticles(x, y, color) {
+        const hex = COLOR_HEX[color]||'#fff';
+        for(let i=0; i<8; i++) {
+            const p = document.createElement('div');
+            p.className = 'particle';
+            p.style.backgroundColor = hex;
+            p.style.left = (x+CONSTANTS.W/2-4)+'px'; p.style.top = (y+CONSTANTS.H/2-10)+'px';
+            stageEl.appendChild(p);
+            const angle = Math.random()*6.28;
+            const dist = 40 + Math.random()*40;
+            p.animate([
+                {transform:'translate(0,0) scale(1)', opacity:1},
+                {transform:`translate(${Math.cos(angle)*dist}px, ${Math.sin(angle)*dist}px) scale(0)`, opacity:0}
+            ], {duration:300, fill:'forwards'}).onfinish=()=>p.remove();
+        }
+    }
+
+    function spawnDock() {
+        dock.forEach((d,i) => {
+            if(d) return;
+            const base = COLORS[Math.floor(Math.random()*COLORS.length)];
+            let items = Array(Math.floor(Math.random()*4)+2).fill(base);
+            if(Math.random() < 0.15) {
+                const sub = COLORS[Math.floor(Math.random()*COLORS.length)];
+                if(sub!==base) items = [...Array(2).fill(sub), ...items]; 
+            }
+            dock[i] = {items};
+            const slot = dockSlots[i];
+            slot.innerHTML = '';
+            const el = createStack(items, 'dock');
+            el.style.top = '15px';
+            el.classList.add('pop-in'); // Dock 也加一点出现动画
+            bindDrag(el, i);
+            slot.appendChild(el);
+        });
+    }
+
+    function bindDrag(el, idx) {
+        const start = (e) => {
+            if(isLock) return;
+            e.preventDefault();
+            const p = e.touches?e.touches[0]:e;
+            SoundManager.playPick();
+            
+            const rect = el.getBoundingClientRect();
+            el.style.opacity = 0;
+            
+            const clone = el.cloneNode(true);
+            clone.className = el.className + ' dragging-clone';
+            clone.classList.remove('in-dock', 'pop-in'); // 移除动画类防止闪烁
+            const last = clone.querySelector('.chip-layer:last-child');
+            if(last) last.style.animation = 'none'; 
+
+            clone.style.width = CONSTANTS.W+'px'; clone.style.height = CONSTANTS.H+'px';
+            clone.style.left = rect.left+'px'; clone.style.top = rect.top+'px';
+            clone.style.opacity = 1;
+            document.body.appendChild(clone);
+
+            requestAnimationFrame(() => {
+                clone.classList.add('smooth-move');
+                updatePos(p.clientX, p.clientY);
+                setTimeout(()=>clone.classList.remove('smooth-move'), 150);
+            });
+
+            const updatePos = (cx, cy) => {
+                clone.style.left = (cx - CONSTANTS.W/2 + CONSTANTS.DRAG_OFFSET_X) + 'px';
+                clone.style.top = (cy - CONSTANTS.H/2 + CONSTANTS.DRAG_OFFSET_Y) + 'px';
+            };
+
+            const checkHigh = () => {
+                document.querySelectorAll('.highlight-target').forEach(x=>x.classList.remove('highlight-target'));
+                const cr = clone.getBoundingClientRect();
+                const cx = cr.left+cr.width/2, cy = cr.top+cr.height/2;
+                
+                let t=null, min=9999;
+                const sRect = stageEl.getBoundingClientRect();
+                
+                for(let r=0; r<5; r++) {
+                    for(let c=0; c<5; c++) {
+                        if(grid[r][c]===null) {
+                            const pos = getPos(r,c);
+                            const tx = pos.x+sRect.left+CONSTANTS.W/2;
+                            const ty = pos.y+sRect.top+CONSTANTS.H/2;
+                            const d = Math.hypot(cx-tx, cy-ty);
+                            if(d<50 && d<min) { min=d; t={r,c}; }
+                        }
+                    }
+                }
+                if(t) document.getElementById(`base-${t.r}-${t.c}`).classList.add('highlight-target');
+                return t;
+            };
+
+            const move = (ev) => {
+                ev.preventDefault();
+                const pp = ev.touches?ev.touches[0]:ev;
+                updatePos(pp.clientX, pp.clientY);
+                checkHigh();
+            };
+            const end = (ev) => {
+                document.removeEventListener('mousemove', move);
+                document.removeEventListener('mouseup', end);
+                document.removeEventListener('touchmove', move);
+                document.removeEventListener('touchend', end);
+                
+                const t = checkHigh();
+                document.querySelectorAll('.highlight-target').forEach(x=>x.classList.remove('highlight-target'));
+
+                if(t) {
+                    SoundManager.playDrop();
+                    place(t.r, t.c, dock[idx]);
+                    dock[idx] = null; dockSlots[idx].innerHTML = '';
+                    clone.remove();
+                } else {
+                    clone.classList.add('smooth-move');
+                    clone.style.left = rect.left+'px'; clone.style.top = rect.top+'px';
+                    setTimeout(()=>{ clone.remove(); el.style.opacity = 1; }, 200);
+                }
+            };
+
+            document.addEventListener('mousemove', move);
+            document.addEventListener('mouseup', end);
+            document.addEventListener('touchmove', move, {passive:false});
+            document.addEventListener('touchend', end);
+        };
+        el.addEventListener('mousedown', start);
+        el.addEventListener('touchstart', start, {passive:false});
+    }
+
+    async function place(r, c, data) {
+        isLock = true;
+        spawnPremadeStack(r, c, data.items);
+        
+        let queue = [{r,c}];
+        while(queue.length) {
+            let cur = queue.shift();
+            if(grid[cur.r][cur.c]) await processMerge(cur.r, cur.c, queue);
+        }
+        
+        if(score >= LEVELS[currentLevelIdx].target) {
+            setTimeout(()=>{
+                SoundManager.playChime();
+                currentLevelIdx++;
+                if(currentLevelIdx>=LEVELS.length) currentLevelIdx=0; 
+                finalScoreEl.innerText = score;
+                levelUpEl.classList.remove('hidden');
+                updateMenuInfo();
+            }, 800);
+        } else {
+            if(dock.every(x=>x===null)) setTimeout(spawnDock, 300);
+            isLock = false;
+            eliminationCombo = 0;
+        }
+    }
+
+    function getNeighbors(r, c) {
+        const offsets = (r%2===0) ? [[-1,-1],[-1,0],[0,-1],[0,1],[1,-1],[1,0]] : [[-1,0],[-1,1],[0,-1],[0,1],[1,0],[1,1]];
+        let res = [];
+        offsets.forEach(o => {
+            const nr=r+o[0], nc=c+o[1];
+            if(nr>=0 && nr<5 && nc>=0 && nc<5 && grid[nr][nc] && grid[nr][nc]!=='INVALID') res.push({r:nr, c:nc, node:grid[nr][nc]});
+        });
+        return res;
+    }
+
+    async function processMerge(r, c, queue) {
+        let center = grid[r][c];
+        if(!center || !center.items.length) return;
+        
+        const topC = center.items[center.items.length-1];
+        const nbs = getNeighbors(r, c).filter(n => {
+            const arr = n.node.items;
+            return arr.length && arr[arr.length-1]===topC;
+        });
+
+        if(!nbs.length) {
+            await checkElimination(r, c, queue);
+            return;
+        }
+
+        for(let n of nbs) {
+            const src = n.node;
+            grid[n.r][n.c] = null; 
+            
+            const sPos = getPos(n.r, n.c);
+            const tPos = getPos(r, c);
+            
+            while(src.items.length && src.items[src.items.length-1]===topC) {
+                let col = src.items.pop();
+                renderStackVisuals(src.el, src.items);
+                
+                const f = document.createElement('div');
+                f.className = `chip-layer c-${col} flying-chip`;
+                f.style.left = sPos.x+'px'; f.style.top = (sPos.y - src.items.length*6)+'px';
+                stageEl.appendChild(f);
+                
+                f.getBoundingClientRect();
+                f.style.left = tPos.x+'px'; f.style.top = (tPos.y - center.items.length*6)+'px';
+                
+                SoundManager.playZip();
+                await new Promise(r=>setTimeout(r, 40));
+                
+                f.remove();
+                center.items.push(col);
+                renderStackVisuals(center.el, center.items);
+                score+=5; scoreEl.innerText = score;
+            }
+            
+            if(src.items.length===0) src.el.remove();
+            else { grid[n.r][n.c] = src; queue.push({r:n.r, c:n.c}); }
+        }
+        await checkElimination(r, c, queue);
+    }
+
+    async function checkElimination(r, c, queue) {
+        let center = grid[r][c];
+        if(!center) return;
+        const items = center.items;
+        const topC = items[items.length-1];
+        let sameCount = 0;
+        for(let i=items.length-1; i>=0; i--) if(items[i]===topC) sameCount++; else break;
+
+        if(sameCount >= 10) { 
+            while(sameCount > 0) {
+                const layers = center.el.querySelectorAll('.chip-layer');
+                const visualIndex = Math.min(items.length, 12) - 1;
+                
+                if(visualIndex >= 0 && layers[visualIndex]) {
+                    layers[visualIndex].classList.add('chip-flash-seq');
+                    SoundManager.playFlash();
+                    await new Promise(res => setTimeout(res, 50)); 
+                }
+
+                const removed = items.pop();
+                sameCount--;
+                score += 100;
+                scoreEl.innerText = score;
+                
+                const p = getPos(r, c);
+                spawnParticles(p.x, p.y - (items.length * CONSTANTS.LAYER_H), removed);
+                SoundManager.playPop(eliminationCombo);
+                
+                renderStackVisuals(center.el, items);
+                await new Promise(res => setTimeout(res, 20));
+            }
+            
+            eliminationCombo++;
+            
+            if(items.length===0) {
+                center.el.remove();
+                grid[r][c] = null;
+            } else {
+                queue.push({r,c});
+            }
+            await new Promise(res=>setTimeout(res, 100));
+        }
+    }
+
+    initGame();
+</script>
+</body>
+</html>
